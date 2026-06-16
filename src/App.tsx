@@ -1,37 +1,30 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import Toolbar from '@/components/Toolbar'
 import EditorPanel from '@/components/EditorPanel'
 import PreviewPanel from '@/components/PreviewPanel'
 import ConsolePanel from '@/components/ConsolePanel'
-import { useSandboxStore } from '@/store/useSandboxStore'
-import { loadFromCurrentHash } from '@/utils/share'
+import { useUrlHashSync } from '@/hooks/useUrlHashSync'
 import { GripHorizontal } from 'lucide-react'
 
 export default function App() {
-  const loadFromHash = useSandboxStore((s) => s.loadFromHash)
-  const [verticalSplit, setVerticalSplit] = useState(55)
-  const [consoleHeight, setConsoleHeight] = useState(200)
+  useUrlHashSync()
+
+  const [verticalSplit, setVerticalSplit] = useState(52)
+  const [consoleHeight, setConsoleHeight] = useState(220)
   const isDraggingV = useRef(false)
   const isDraggingC = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const data = loadFromCurrentHash()
-    if (data) {
-      loadFromHash(data)
-    }
-  }, [loadFromHash])
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (isDraggingV.current && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect()
       const ratio = ((e.clientY - rect.top) / rect.height) * 100
-      setVerticalSplit(Math.max(20, Math.min(80, ratio)))
+      setVerticalSplit(Math.max(25, Math.min(75, ratio)))
     }
     if (isDraggingC.current && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect()
       const fromBottom = rect.bottom - e.clientY
-      setConsoleHeight(Math.max(80, Math.min(rect.height * 0.6, fromBottom)))
+      setConsoleHeight(Math.max(100, Math.min(rect.height * 0.5, fromBottom)))
     }
   }, [])
 
@@ -64,7 +57,7 @@ export default function App() {
         </div>
 
         <div
-          className="flex items-center justify-center h-[6px] bg-[#0d0e1f] cursor-row-resize hover:bg-[#2a2d4e] transition-colors group relative z-10"
+          className="flex items-center justify-center h-[5px] bg-[#0d0e1f] cursor-row-resize hover:bg-[#2a2d4e] transition-colors group relative z-20"
           onMouseDown={(e) => {
             e.preventDefault()
             isDraggingV.current = true
@@ -73,7 +66,7 @@ export default function App() {
           }}
         >
           <GripHorizontal
-            size={14}
+            size={13}
             className="text-[#2a2d4e] group-hover:text-[#636da0] transition-colors"
           />
         </div>
@@ -87,7 +80,7 @@ export default function App() {
           </div>
 
           <div
-            className="flex items-center justify-center h-[4px] bg-[#0d0e1f] cursor-row-resize hover:bg-[#2a2d4e] transition-colors shrink-0"
+            className="flex items-center justify-center h-[4px] bg-[#12132a] cursor-row-resize hover:bg-[#2a2d4e] transition-colors shrink-0 z-10"
             onMouseDown={(e) => {
               e.preventDefault()
               isDraggingC.current = true
@@ -99,7 +92,7 @@ export default function App() {
           </div>
 
           <div
-            className="shrink-0 overflow-hidden"
+            className="shrink-0 overflow-hidden border-t border-[#2a2d4e]"
             style={{ height: consoleHeight }}
           >
             <ConsolePanel />

@@ -13,17 +13,28 @@ interface SandboxState {
   html: string
   css: string
   javascript: string
+
+  runHtml: string
+  runCss: string
+  runJavascript: string
+
+  autoRun: boolean
+  hasPendingChanges: boolean
+
   consoleEntries: ConsoleEntry[]
   consoleOpen: boolean
-  activeEditorTab: 'html' | 'css' | 'javascript'
 
   setHtml: (v: string) => void
   setCss: (v: string) => void
   setJavascript: (v: string) => void
+
+  setAutoRun: (v: boolean) => void
+  runCode: (options?: { clearConsole?: boolean }) => void
+
   addConsoleEntry: (entry: ConsoleEntry) => void
   clearConsole: () => void
   toggleConsole: () => void
-  setActiveEditorTab: (tab: 'html' | 'css' | 'javascript') => void
+
   loadFromHash: (data: { html: string; css: string; javascript: string }) => void
 }
 
@@ -91,27 +102,90 @@ btn.addEventListener('click', () => {
 
 console.log('Sandbox ready! Edit the code above.');`
 
-export const useSandboxStore = create<SandboxState>((set) => ({
+export const useSandboxStore = create<SandboxState>((set, get) => ({
   html: DEFAULT_HTML,
   css: DEFAULT_CSS,
   javascript: DEFAULT_JS,
+
+  runHtml: DEFAULT_HTML,
+  runCss: DEFAULT_CSS,
+  runJavascript: DEFAULT_JS,
+
+  autoRun: true,
+  hasPendingChanges: false,
+
   consoleEntries: [],
   consoleOpen: true,
-  activeEditorTab: 'html',
 
-  setHtml: (v) => set({ html: v }),
-  setCss: (v) => set({ css: v }),
-  setJavascript: (v) => set({ javascript: v }),
+  setHtml: (v) => {
+    const state = get()
+    const hasPending = !state.autoRun && (
+      v !== state.runHtml ||
+      state.css !== state.runCss ||
+      state.javascript !== state.runJavascript
+    )
+    set({ html: v, hasPendingChanges: hasPending })
+  },
+  setCss: (v) => {
+    const state = get()
+    const hasPending = !state.autoRun && (
+      state.html !== state.runHtml ||
+      v !== state.runCss ||
+      state.javascript !== state.runJavascript
+    )
+    set({ css: v, hasPendingChanges: hasPending })
+  },
+  setJavascript: (v) => {
+    const state = get()
+    const hasPending = !state.autoRun && (
+      state.html !== state.runHtml ||
+      state.css !== state.runCss ||
+      v !== state.runJavascript
+    )
+    set({ javascript: v, hasPendingChanges: hasPending })
+  },
+
+  setAutoRun: (v) => {
+    if (v) {
+      const state = get()
+      set({
+        autoRun: true,
+        runHtml: state.html,
+        runCss: state.css,
+        runJavascript: state.javascript,
+        hasPendingChanges: false,
+      })
+    } else {
+      set({ autoRun: false })
+    }
+  },
+
+  runCode: (options = {}) => {
+    const { clearConsole = false } = options
+    const state = get()
+    set({
+      runHtml: state.html,
+      runCss: state.css,
+      runJavascript: state.javascript,
+      hasPendingChanges: false,
+      consoleEntries: clearConsole ? [] : state.consoleEntries,
+    })
+  },
+
   addConsoleEntry: (entry) =>
     set((state) => ({ consoleEntries: [...state.consoleEntries, entry] })),
   clearConsole: () => set({ consoleEntries: [] }),
   toggleConsole: () => set((state) => ({ consoleOpen: !state.consoleOpen })),
-  setActiveEditorTab: (tab) => set({ activeEditorTab: tab }),
+
   loadFromHash: (data) =>
     set({
       html: data.html,
       css: data.css,
       javascript: data.javascript,
+      runHtml: data.html,
+      runCss: data.css,
+      runJavascript: data.javascript,
       consoleEntries: [],
+      hasPendingChanges: false,
     }),
 }))

@@ -1,60 +1,61 @@
 import { useState } from 'react'
-import { useSandboxStore } from '@/store/useSandboxStore'
-import { getShareUrl } from '@/utils/share'
-import { Share2, RotateCcw, Check, Code2 } from 'lucide-react'
+import { Share2, Check, Code2, RotateCcw } from 'lucide-react'
 
 export default function Toolbar() {
-  const html = useSandboxStore((s) => s.html)
-  const css = useSandboxStore((s) => s.css)
-  const javascript = useSandboxStore((s) => s.javascript)
-  const loadFromHash = useSandboxStore((s) => s.loadFromHash)
   const [copied, setCopied] = useState(false)
 
   const handleShare = async () => {
-    const url = getShareUrl({ html, css, javascript })
     try {
-      await navigator.clipboard.writeText(url)
+      await navigator.clipboard.writeText(window.location.href)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      prompt('Copy this link:', url)
+      prompt('Copy this link:', window.location.href)
     }
   }
 
   const handleReset = () => {
-    loadFromHash({
-      html: '<div class="container">\n  <h1>Hello, Sandbox!</h1>\n  <p>Start editing to see live changes.</p>\n</div>',
-      css: '.container {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  min-height: 100vh;\n  font-family: system-ui, sans-serif;\n}',
-      javascript: "console.log('Sandbox reset!');",
-    })
-    window.location.hash = ''
+    if (confirm('Reset all code to defaults?')) {
+      window.location.hash = ''
+      window.location.reload()
+    }
   }
 
   return (
-    <div className="flex items-center justify-between px-4 py-2 bg-[#0d0e1f] border-b border-[#2a2d4e]">
+    <div className="flex items-center justify-between px-4 py-2.5 bg-[#0d0e1f] border-b border-[#2a2d4e] shrink-0">
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#e44d26] via-[#264de4] to-[#f7df1e] flex items-center justify-center">
-            <Code2 size={15} className="text-white" />
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#e44d26] via-[#264de4] to-[#f7df1e] flex items-center justify-center shadow-lg shadow-black/30">
+            <Code2 size={16} className="text-white" />
           </div>
-          <h1 className="text-sm font-semibold text-[#c8cad8] tracking-wide">
-            Sandbox
-          </h1>
+          <div className="flex flex-col leading-tight">
+            <h1 className="text-sm font-bold text-[#e8eaf5] tracking-tight">
+              Code Sandbox
+            </h1>
+            <span className="text-[10px] text-[#5a5d80] font-medium">
+              Live code playground
+            </span>
+          </div>
         </div>
       </div>
 
       <div className="flex items-center gap-2">
         <button
           onClick={handleReset}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-[#8a8db0] hover:text-[#c8cad8] bg-[#1a1b2e] hover:bg-[#2a2d4e] rounded-lg transition-all border border-[#2a2d4e] hover:border-[#3a3d5c]"
-          title="Reset code"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-[#636da0] hover:text-[#c8cad8] bg-[#16172e] hover:bg-[#1e2040] rounded-md transition-all border border-[#2a2d4e] hover:border-[#3a3d5c]"
+          title="Reset to defaults"
         >
           <RotateCcw size={13} />
-          Reset
+          <span className="hidden sm:inline">Reset</span>
         </button>
+
         <button
           onClick={handleShare}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-[#0d0e1f] bg-[#f7df1e] hover:bg-[#ffe94a] rounded-lg transition-all font-medium shadow-lg shadow-[#f7df1e20]"
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs rounded-md transition-all font-medium shadow-md ${
+            copied
+              ? 'text-[#0d0e1f] bg-[#98c379] shadow-[#98c379]/20'
+              : 'text-[#0d0e1f] bg-[#f7df1e] hover:bg-[#ffe94a] shadow-[#f7df1e]/20'
+          }`}
           title="Share via URL"
         >
           {copied ? (

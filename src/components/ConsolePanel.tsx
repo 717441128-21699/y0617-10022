@@ -1,19 +1,13 @@
+import { useRef, useEffect } from 'react'
 import { useSandboxStore } from '@/store/useSandboxStore'
 import ObjectTree from './ObjectTree'
-import { Trash2, ChevronDown, ChevronUp, Terminal } from 'lucide-react'
+import { Trash2, Terminal, AlertTriangle, Info, XCircle } from 'lucide-react'
 
-const LEVEL_STYLES: Record<string, { border: string; bg: string; icon: string }> = {
-  log: { border: 'border-l-[#636da0]', bg: 'bg-[#1a1b2e]', icon: 'text-[#636da0]' },
-  info: { border: 'border-l-[#61afef]', bg: 'bg-[#1a1d35]', icon: 'text-[#61afef]' },
-  warn: { border: 'border-l-[#e5c07b]', bg: 'bg-[#1e1c25]', icon: 'text-[#e5c07b]' },
-  error: { border: 'border-l-[#e06c75]', bg: 'bg-[#1e1a22]', icon: 'text-[#e06c75]' },
-}
-
-const LEVEL_LABELS: Record<string, string> = {
-  log: '',
-  info: 'ℹ',
-  warn: '⚠',
-  error: '✕',
+const LEVEL_CONFIG: Record<string, { icon: typeof Terminal; iconColor: string; borderColor: string; bgColor: string }> = {
+  log: { icon: Terminal, iconColor: 'text-[#c8cad8]', borderColor: 'border-transparent', bgColor: 'bg-transparent hover:bg-[#1a1d30]' },
+  info: { icon: Info, iconColor: 'text-[#61afef]', borderColor: 'border-[#61afef]/20', bgColor: 'bg-[#1a1d35] hover:bg-[#1e2240]' },
+  warn: { icon: AlertTriangle, iconColor: 'text-[#e5c07b]', borderColor: 'border-[#e5c07b]/20', bgColor: 'bg-[#1e1c25] hover:bg-[#282530]' },
+  error: { icon: XCircle, iconColor: 'text-[#e06c75]', borderColor: 'border-[#e06c75]/20', bgColor: 'bg-[#1e1a22] hover:bg-[#282028]' },
 }
 
 export default function ConsolePanel() {
@@ -21,76 +15,103 @@ export default function ConsolePanel() {
   const consoleOpen = useSandboxStore((s) => s.consoleOpen)
   const toggleConsole = useSandboxStore((s) => s.toggleConsole)
   const clearConsole = useSandboxStore((s) => s.clearConsole)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const errorCount = entries.filter((e) => e.level === 'error').length
+  const warnCount = entries.filter((e) => e.level === 'warn').length
+
+  useEffect(() => {
+    if (scrollRef.current && consoleOpen) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [entries, consoleOpen])
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-[#16172e]">
       <div
-        className="flex items-center justify-between px-3 py-1.5 bg-[#12132a] border-b border-[#2a2d4e] cursor-pointer select-none"
+        className="flex items-center justify-between px-3 py-1.5 bg-[#12132a] border-b border-[#2a2d4e] cursor-pointer select-none shrink-0"
         onClick={toggleConsole}
       >
-        <div className="flex items-center gap-2">
-          <Terminal size={14} className="text-[#636da0]" />
-          <span className="text-xs font-medium text-[#8a8db0] tracking-wide uppercase">
-            Console
-          </span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <Terminal size={13} className="text-[#8a8db0]" />
+            <span className="text-[11px] font-medium text-[#8a8db0] tracking-wide uppercase">
+              Console
+            </span>
+          </div>
+
           {entries.length > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#2a2d4e] text-[#8a8db0]">
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#2a2d4e] text-[#8a8db0] font-medium">
               {entries.length}
             </span>
           )}
+
+          {warnCount > 0 && (
+            <div className="flex items-center gap-1 text-[#e5c07b]">
+              <AlertTriangle size={11} />
+              <span className="text-[10px] font-medium">{warnCount}</span>
+            </div>
+          )}
+
           {errorCount > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#e06c7520] text-[#e06c75]">
-              {errorCount}
-            </span>
+            <div className="flex items-center gap-1 text-[#e06c75]">
+              <XCircle size={11} />
+              <span className="text-[10px] font-medium">{errorCount}</span>
+            </div>
           )}
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-1">
           <button
             onClick={(e) => {
               e.stopPropagation()
               clearConsole()
             }}
-            className="p-1 hover:bg-[#2a2d4e] rounded transition-colors text-[#636da0] hover:text-[#c8cad8]"
+            className="flex items-center gap-1 px-2 py-0.5 text-[11px] text-[#636da0] hover:text-[#c8cad8] hover:bg-[#1a1b2e] rounded transition-colors"
             title="Clear console"
           >
-            <Trash2 size={13} />
+            <Trash2 size={11} />
+            <span className="hidden sm:inline">Clear</span>
           </button>
-          {consoleOpen ? (
-            <ChevronDown size={14} className="text-[#636da0]" />
-          ) : (
-            <ChevronUp size={14} className="text-[#636da0]" />
-          )}
         </div>
       </div>
+
       {consoleOpen && (
-        <div className="flex-1 overflow-y-auto bg-[#16172e]">
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto overflow-x-hidden"
+          style={{ scrollBehavior: 'smooth' }}
+        >
           {entries.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-[#3a3d5e] text-xs">
-              Console output will appear here
+            <div className="flex items-center justify-center h-full text-[#3a3d5e] text-xs font-mono">
+              Console is empty
             </div>
           ) : (
-            entries.map((entry) => {
-              const style = LEVEL_STYLES[entry.level] || LEVEL_STYLES.log
+            entries.map((entry, idx) => {
+              const config = LEVEL_CONFIG[entry.level] || LEVEL_CONFIG.log
+              const Icon = config.icon
               return (
                 <div
                   key={entry.id}
-                  className={`border-l-2 ${style.border} ${style.bg} px-3 py-1.5 border-b border-[#1e2040] hover:brightness-110 transition-all`}
+                  className={`flex items-start gap-2 px-3 py-1.5 border-b border-[#1e2040] transition-colors ${config.bgColor}`}
                 >
-                  <div className="flex items-start gap-2">
-                    {LEVEL_LABELS[entry.level] && (
-                      <span className={`text-xs mt-0.5 ${style.icon} shrink-0`}>
-                        {LEVEL_LABELS[entry.level]}
-                      </span>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <ObjectTree args={entry.args} />
-                    </div>
-                    <span className="text-[10px] text-[#3a3d5e] shrink-0 mt-0.5">
-                      {new Date(entry.timestamp).toLocaleTimeString()}
+                  <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                    <span className="text-[10px] text-[#3a3d5e] font-mono w-6 text-right">
+                      {idx + 1}
                     </span>
+                    <Icon size={12} className={config.iconColor} />
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <ObjectTree args={entry.args} />
+                  </div>
+                  <span className="text-[10px] text-[#3a3d5e] shrink-0 pt-1 font-mono">
+                    {new Date(entry.timestamp).toLocaleTimeString(undefined, {
+                      hour12: false,
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    })}
+                  </span>
                 </div>
               )
             })

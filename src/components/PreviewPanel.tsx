@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import { useSandboxStore, type ConsoleEntry, type ConsoleLogLevel } from '@/store/useSandboxStore'
+import RunControls from './RunControls'
 
 function serializeArg(arg: unknown): unknown {
   if (arg === null) return { __type: 'null', __display: 'null' }
@@ -9,7 +10,7 @@ function serializeArg(arg: unknown): unknown {
   if (typeof arg === 'boolean') return { __type: 'boolean', __display: String(arg) }
   if (typeof arg === 'symbol') return { __type: 'symbol', __display: arg.toString() }
   if (typeof arg === 'bigint') return { __type: 'bigint', __display: String(arg) }
-  if (typeof arg === 'function') return { __type: 'function', __display: `f ${arg.name || 'anonymous'}()` }
+  if (typeof arg === 'function') return { __type: 'function', __display: `ƒ ${arg.name || 'anonymous'}()` }
   if (arg instanceof Error) {
     return {
       __type: 'error',
@@ -20,7 +21,13 @@ function serializeArg(arg: unknown): unknown {
   if (Array.isArray(arg)) {
     return {
       __type: 'array',
-      __display: `Array(${arg.length})`,
+      __display: `(${arg.length}) [${arg.slice(0, 3).map((x) => {
+        const t = typeof x
+        if (x === null) return 'null'
+        if (t === 'object') return '…'
+        if (t === 'string') return `'${x.slice(0, 10)}${x.length > 10 ? '…' : ''}'`
+        return String(x).slice(0, 10)
+      }).join(', ')}${arg.length > 3 ? ', …' : ''}]`,
       __items: arg.map(serializeArg),
     }
   }
@@ -30,13 +37,14 @@ function serializeArg(arg: unknown): unknown {
         key: k,
         value: serializeArg(v),
       }))
+      const keys = entries.slice(0, 3).map((e) => e.key).join(', ')
       return {
         __type: 'object',
-        __display: `{${entries.length > 0 ? '...' : ''}}`,
+        __display: `{${entries.length > 0 ? keys + (entries.length > 3 ? ', …' : '') : ''}}`,
         __entries: entries,
       }
     } catch {
-      return { __type: 'object', __display: '{...}' }
+      return { __type: 'object', __display: '{…}' }
     }
   }
   return { __type: 'unknown', __display: String(arg) }
@@ -47,20 +55,20 @@ const CONSOLE_INTERCEPT = `
 (function() {
   var serializeArg = ${serializeArg.toString()};
   var originalConsole = {};
-  var methods = ['log', 'warn', 'error', 'info'];
+  var methods = ['log', 'warn', 'error', 'info', 'dir', 'table', 'clear'];
   methods.forEach(function(method) {
-    originalConsole[method] = console[method].bind(console);
+    originalConsole[method] = console[method] ? console[method].bind(console) : function(){};
     console[method] = function() {
       var args = Array.from(arguments).map(function(arg) {
         return serializeArg(arg);
       });
       window.parent.postMessage({
         type: 'sandbox-console',
-        level: method,
+        level: method === 'dir' ? 'log' : method === 'table' ? 'log' : method,
         args: args,
         timestamp: Date.now()
       }, '*');
-      originalConsole[method].apply(console, arguments);
+      try { originalConsole[method].apply(console, arguments); } catch(e) {}
     };
   });
 
@@ -77,13 +85,24 @@ const CONSOLE_INTERCEPT = `
   };
 
   window.addEventListener('unhandledrejection', function(event) {
+    var reason = event.reason;
+    var msg = 'Unhandled Promise Rejection';
+    var stack = '';
+    if (reason instanceof Error) {
+      msg = reason.message || msg;
+      stack = reason.stack || '';
+    } else if (typeof reason === 'string') {
+      msg = reason;
+    } else {
+      try { msg = JSON.stringify(reason); } catch(e) { msg = String(reason); }
+    }
     window.parent.postMessage({
       type: 'sandbox-error',
-      message: 'Unhandled Promise Rejection: ' + String(event.reason),
+      message: msg,
       source: '',
       lineno: 0,
       colno: 0,
-      stack: event.reason && event.reason.stack ? event.reason.stack : ''
+      stack: stack
     }, '*');
   });
 })();
@@ -101,7 +120,21 @@ ${CONSOLE_INTERCEPT}
 </head>
 <body>
 ${htmlCode}
-<script>${jsCode}</script>
+<script>
+try {
+${jsCode}
+} catch(e) {
+  window.parent.postMessage({
+    type: 'sandbox-error',
+    message: e.message || String(e),
+    source: '',
+    lineno: 0,
+    colno: 0,
+    stack: e.stack || ''
+  }, '*');
+  throw e;
+}
+</script>
 </body>
 </html>`
 }
@@ -119,16 +152,29 @@ function useDebouncedValue<T>(value: T, delay: number): T {
 
 export default function PreviewPanel() {
   const iframeRef = useRef<HTMLIFrameElement>(null)
+
   const html = useSandboxStore((s) => s.html)
   const css = useSandboxStore((s) => s.css)
   const javascript = useSandboxStore((s) => s.javascript)
+  const runHtml = useSandboxStore((s) => s.runHtml)
+  const runCss = useSandboxStore((s) => s.runCss)
+  const runJavascript = useSandboxStore((s) => s.runJavascript)
+  const autoRun = useSandboxStore((s) => s.autoRun)
   const addConsoleEntry = useSandboxStore((s) => s.addConsoleEntry)
+  const runCode = useSandboxStore((s) => s.runCode)
 
-  const debouncedHtml = useDebouncedValue(html, 300)
-  const debouncedCss = useDebouncedValue(css, 300)
-  const debouncedJs = useDebouncedValue(javascript, 300)
+  const debouncedHtml = useDebouncedValue(html, 400)
+  const debouncedCss = useDebouncedValue(css, 400)
+  const debouncedJs = useDebouncedValue(javascript, 400)
 
-  const srcDoc = buildSrcDoc(debouncedHtml, debouncedCss, debouncedJs)
+  useEffect(() => {
+    if (autoRun) {
+      runCode({ clearConsole: false })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedHtml, debouncedCss, debouncedJs, autoRun])
+
+  const srcDoc = buildSrcDoc(runHtml, runCss, runJavascript)
 
   const handleMessage = useCallback(
     (event: MessageEvent) => {
@@ -136,6 +182,10 @@ export default function PreviewPanel() {
       if (!data || typeof data !== 'object') return
 
       if (data.type === 'sandbox-console') {
+        if (data.level === 'clear') {
+          // handle console.clear from iframe
+          return
+        }
         const entry: ConsoleEntry = {
           id: `c-${++entryIdCounter}`,
           level: data.level as ConsoleLogLevel,
@@ -170,14 +220,19 @@ export default function PreviewPanel() {
   }, [handleMessage])
 
   return (
-    <div className="h-full w-full bg-white rounded-lg overflow-hidden shadow-lg shadow-black/20">
-      <iframe
-        ref={iframeRef}
-        srcDoc={srcDoc}
-        sandbox="allow-scripts"
-        title="Preview"
-        className="w-full h-full border-0"
-      />
+    <div className="flex flex-col h-full w-full bg-[#16172e]">
+      <RunControls />
+      <div className="flex-1 overflow-hidden p-2 bg-[#16172e]">
+        <div className="h-full w-full bg-white rounded-lg overflow-hidden shadow-lg shadow-black/30">
+          <iframe
+            ref={iframeRef}
+            srcDoc={srcDoc}
+            sandbox="allow-scripts"
+            title="Preview"
+            className="w-full h-full border-0"
+          />
+        </div>
+      </div>
     </div>
   )
 }

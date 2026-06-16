@@ -40,23 +40,57 @@ function getTypeColor(type: string): string {
   }
 }
 
-function ObjectTreeNode({ data, depth = 0 }: { data: SerializedArg; depth?: number }) {
-  const [expanded, setExpanded] = useState(depth < 1)
+function getPropKeyColor(key: string): string {
+  if (key.startsWith('__')) return '#636da0'
+  return '#e06c75'
+}
 
-  const hasChildren =
+interface TreeNodeProps {
+  data: SerializedArg
+  depth?: number
+  isLast?: boolean
+  pathPrefix?: string
+}
+
+function ObjectTreeNode({ data, depth = 0, pathPrefix = '' }: TreeNodeProps) {
+  const [expanded, setExpanded] = useState(false)
+
+  const isExpandable =
     (data.__type === 'object' && (data.__entries?.length ?? 0) > 0) ||
-    (data.__type === 'array' && (data.__items?.length ?? 0) > 0)
+    (data.__type === 'array' && (data.__items?.length ?? 0) > 0) ||
+    (data.__type === 'error' && !!data.stack)
 
-  const indent = depth * 16
+  const indent = depth * 14
 
-  if (data.__type === 'error' && data.stack) {
+  if (data.__type === 'error') {
     return (
-      <div>
-        <span style={{ color: '#e06c75' }}>{data.__display}</span>
+      <div style={{ marginLeft: 0 }}>
+        {data.stack ? (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="inline-flex items-start gap-1 bg-transparent border-none cursor-pointer p-0 font-mono text-[13px] text-left"
+            style={{ color: '#e06c75' }}
+          >
+            <span
+              className="inline-block shrink-0 transition-transform duration-100 mt-0.5"
+              style={{
+                transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                fontSize: '9px',
+                width: '11px',
+                color: '#636da0',
+              }}
+            >
+              ▶
+            </span>
+            <span className="text-[#e06c75] font-medium">{data.__display}</span>
+          </button>
+        ) : (
+          <span style={{ color: '#e06c75' }}>{data.__display}</span>
+        )}
         {expanded && data.stack && (
           <pre
-            className="mt-1 text-xs whitespace-pre-wrap opacity-60 ml-2"
-            style={{ color: '#c8cad8' }}
+            className="text-[12px] whitespace-pre-wrap mt-1 leading-5"
+            style={{ color: '#9093b0', paddingLeft: indent + 14 }}
           >
             {data.stack}
           </pre>
@@ -69,67 +103,90 @@ function ObjectTreeNode({ data, depth = 0 }: { data: SerializedArg; depth?: numb
     return <span style={{ color: '#98c379' }}>"{data.__display}"</span>
   }
 
-  if (['number', 'boolean', 'bigint', 'symbol', 'null', 'undefined'].includes(data.__type)) {
-    return <span style={{ color: getTypeColor(data.__type) }}>{data.__display}</span>
+  if (data.__type === 'number') {
+    return <span style={{ color: '#d19a66' }}>{data.__display}</span>
   }
 
-  if (data.__type === 'function') {
-    return <span style={{ color: '#c678dd' }}>{data.__display}</span>
+  if (data.__type === 'boolean') {
+    return <span style={{ color: '#56b6c2' }}>{data.__display}</span>
   }
 
-  if (!hasChildren) {
+  if (['null', 'undefined', 'symbol', 'bigint', 'function'].includes(data.__type)) {
+    return <span style={{ color: getTypeColor(data.__type), fontStyle: data.__type === 'undefined' ? 'italic' : 'normal' }}>{data.__display}</span>
+  }
+
+  if (!isExpandable) {
     return (
       <span style={{ color: getTypeColor(data.__type) }}>{data.__display}</span>
     )
   }
 
   return (
-    <div style={{ marginLeft: depth > 0 ? 0 : 0 }}>
+    <div>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="inline-flex items-center gap-1 hover:opacity-80 bg-transparent border-none cursor-pointer p-0 font-mono text-[13px]"
+        className="inline-flex items-start gap-1 bg-transparent border-none cursor-pointer p-0 font-mono text-[13px] text-left hover:brightness-125 transition-all"
         style={{ color: getTypeColor(data.__type) }}
       >
         <span
-          className="inline-block transition-transform duration-150"
+          className="inline-block shrink-0 transition-transform duration-100 mt-0.5"
           style={{
             transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
-            fontSize: '10px',
-            width: '12px',
-            textAlign: 'center',
+            fontSize: '9px',
+            width: '11px',
+            color: '#636da0',
           }}
         >
           ▶
         </span>
-        {data.__type === 'array'
-          ? `Array(${data.__items!.length})`
-          : data.__entries!.length === 0
-            ? '{}'
-            : `{${data.__entries!.slice(0, 3).map((e) => e.key).join(', ')}${data.__entries!.length > 3 ? ', ...' : ''}}`}
+        <span style={{ color: getTypeColor(data.__type) }}>{data.__display}</span>
       </button>
       {expanded && (
-        <div style={{ marginLeft: indent + 16 }}>
+        <div style={{ paddingLeft: 12, marginTop: 2, marginBottom: 2 }}>
           {data.__type === 'array'
             ? data.__items!.map((item, i) => (
-                <div key={i} className="flex items-start gap-1 py-[1px]">
-                  <span style={{ color: '#636da0' }}>{i}:</span>
+                <div
+                  key={i}
+                  className="flex items-start gap-2 py-[1px] leading-5"
+                >
+                  <span
+                    className="shrink-0 font-mono text-[12px]"
+                    style={{ color: '#636da0', minWidth: '24px', textAlign: 'right' }}
+                  >
+                    {i}:
+                  </span>
                   {isSerializedArg(item) ? (
-                    <ObjectTreeNode data={item} depth={depth + 1} />
+                    <ObjectTreeNode data={item} depth={depth + 1} pathPrefix={`${pathPrefix}[${i}]`} />
                   ) : (
                     <span style={{ color: '#c8cad8' }}>{String(item)}</span>
                   )}
                 </div>
               ))
-            : data.__entries!.map((entry) => (
-                <div key={entry.key} className="flex items-start gap-1 py-[1px]">
-                  <span style={{ color: '#e06c75' }}>{entry.key}:</span>
+            : data.__entries!.map((entry, idx) => (
+                <div
+                  key={entry.key}
+                  className="flex items-start gap-2 py-[1px] leading-5"
+                  style={{ marginLeft: 0 }}
+                >
+                  <span
+                    className="shrink-0 font-mono text-[13px]"
+                    style={{ color: getPropKeyColor(entry.key) }}
+                  >
+                    {entry.key}
+                  </span>
+                  <span style={{ color: '#636da0' }}>:</span>
                   {isSerializedArg(entry.value) ? (
-                    <ObjectTreeNode data={entry.value} depth={depth + 1} />
+                    <ObjectTreeNode data={entry.value} depth={depth + 1} pathPrefix={`${pathPrefix}.${entry.key}`} />
                   ) : (
                     <span style={{ color: '#c8cad8' }}>{String(entry.value)}</span>
                   )}
                 </div>
               ))}
+          <div className="text-[11px] mt-1" style={{ color: '#3a3d5e', paddingLeft: 0 }}>
+            {data.__type === 'array'
+              ? `length: ${data.__items!.length}`
+              : `{${data.__entries!.length} ${data.__entries!.length === 1 ? 'property' : 'properties'}}`}
+          </div>
         </div>
       )}
     </div>
@@ -138,17 +195,16 @@ function ObjectTreeNode({ data, depth = 0 }: { data: SerializedArg; depth?: numb
 
 export default function ObjectTree({ args }: { args: unknown[] }) {
   return (
-    <div className="font-mono text-[13px] leading-5">
-      {args.map((arg, i) => {
-        if (isSerializedArg(arg)) {
-          return <ObjectTreeNode key={i} data={arg} depth={0} />
-        }
-        return (
-          <span key={i} style={{ color: '#c8cad8' }}>
-            {String(arg)}
-          </span>
-        )
-      })}
+    <div className="font-mono text-[13px] leading-5 break-words">
+      {args.map((arg, i) => (
+        <span key={i} className={i > 0 ? 'ml-1' : ''}>
+          {isSerializedArg(arg) ? (
+            <ObjectTreeNode data={arg} depth={0} />
+          ) : (
+            <span style={{ color: '#c8cad8' }}>{String(arg)}</span>
+          )}
+        </span>
+      ))}
     </div>
   )
 }
