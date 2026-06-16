@@ -1,8 +1,14 @@
 import { useState } from 'react'
+import TemplateSelector from './TemplateSelector'
+import DraftManager from './DraftManager'
+import { useSandboxStore } from '@/store/useSandboxStore'
+import { useDraftStore } from '@/store/useDraftStore'
 import { Share2, Check, Code2, RotateCcw } from 'lucide-react'
 
 export default function Toolbar() {
   const [copied, setCopied] = useState(false)
+  const [activeTemplateId, setActiveTemplateId] = useState<string | null>('default')
+  const setActiveDraftId = useDraftStore((s) => s.setActiveDraftId)
 
   const handleShare = async () => {
     try {
@@ -16,9 +22,20 @@ export default function Toolbar() {
 
   const handleReset = () => {
     if (confirm('Reset all code to defaults?')) {
+      useSandboxStore.getState().loadFromHash({
+        html: '<div class="container">\n  <h1>Hello, Sandbox!</h1>\n  <p>Start editing to see live changes.</p>\n  <button id="btn">Click Me</button>\n</div>',
+        css: '.container {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  min-height: 100vh;\n  font-family: system-ui, sans-serif;\n  background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);\n  color: #fff;\n}\n\nh1 { color: #fff; }',
+        javascript: "console.log('Sandbox reset!');",
+      })
+      setActiveTemplateId('default')
+      setActiveDraftId(null)
       window.location.hash = ''
-      window.location.reload()
     }
+  }
+
+  const handleTemplateChange = (id: string | null) => {
+    setActiveTemplateId(id)
+    setActiveDraftId(null)
   }
 
   return (
@@ -37,12 +54,21 @@ export default function Toolbar() {
             </span>
           </div>
         </div>
+
+        <div className="w-px h-8 bg-[#2a2d4e] mx-1" />
+
+        <TemplateSelector
+          activeTemplateId={activeTemplateId}
+          onTemplateChange={handleTemplateChange}
+        />
+
+        <DraftManager />
       </div>
 
       <div className="flex items-center gap-2">
         <button
           onClick={handleReset}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-[#636da0] hover:text-[#c8cad8] bg-[#16172e] hover:bg-[#1e2040] rounded-md transition-all border border-[#2a2d4e] hover:border-[#3a3d5c]"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-[#636da0] hover:text-[#c8cad8] bg-[#16172e] hover:bg-[#1e2040] rounded-md transition-all border border-[#2a2d4e] hover:border-[#3a3d5c]"
           title="Reset to defaults"
         >
           <RotateCcw size={13} />

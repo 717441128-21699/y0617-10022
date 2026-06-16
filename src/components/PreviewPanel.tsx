@@ -2,7 +2,7 @@ import { useRef, useEffect, useCallback, useState } from 'react'
 import { useSandboxStore, type ConsoleEntry, type ConsoleLogLevel } from '@/store/useSandboxStore'
 import RunControls from './RunControls'
 
-function serializeArg(arg: unknown): unknown {
+function serializeArg(arg: unknown, seen = new WeakSet<object>()): unknown {
   if (arg === null) return { __type: 'null', __display: 'null' }
   if (arg === undefined) return { __type: 'undefined', __display: 'undefined' }
   if (typeof arg === 'string') return { __type: 'string', __display: arg }
@@ -18,24 +18,34 @@ function serializeArg(arg: unknown): unknown {
       stack: arg.stack || '',
     }
   }
-  if (Array.isArray(arg)) {
-    return {
-      __type: 'array',
-      __display: `(${arg.length}) [${arg.slice(0, 3).map((x) => {
+  if (typeof arg === 'object') {
+    if (seen.has(arg as object)) {
+      return {
+        __type: 'circular',
+        __display: '[Circular Reference]',
+      }
+    }
+    seen.add(arg as object)
+
+    if (Array.isArray(arg)) {
+      const displayItems = arg.slice(0, 3).map((x) => {
         const t = typeof x
         if (x === null) return 'null'
         if (t === 'object') return '…'
         if (t === 'string') return `'${x.slice(0, 10)}${x.length > 10 ? '…' : ''}'`
         return String(x).slice(0, 10)
-      }).join(', ')}${arg.length > 3 ? ', …' : ''}]`,
-      __items: arg.map(serializeArg),
+      })
+      return {
+        __type: 'array',
+        __display: `(${arg.length}) [${displayItems.join(', ')}${arg.length > 3 ? ', …' : ''}]`,
+        __items: arg.map((item) => serializeArg(item, seen)),
+      }
     }
-  }
-  if (typeof arg === 'object') {
+
     try {
       const entries = Object.entries(arg as Record<string, unknown>).map(([k, v]) => ({
         key: k,
-        value: serializeArg(v),
+        value: serializeArg(v, seen),
       }))
       const keys = entries.slice(0, 3).map((e) => e.key).join(', ')
       return {
@@ -53,21 +63,83 @@ function serializeArg(arg: unknown): unknown {
 const CONSOLE_INTERCEPT = `
 <script>
 (function() {
-  var serializeArg = ${serializeArg.toString()};
+  function serializeArg(arg, seen) {
+    seen = seen || new WeakSet();
+    if (arg === null) return { __type: 'null', __display: 'null' };
+    if (arg === undefined) return { __type: 'undefined', __display: 'undefined' };
+    if (typeof arg === 'string') return { __type: 'string', __display: arg };
+    if (typeof arg === 'number') return { __type: 'number', __display: String(arg) };
+    if (typeof arg === 'boolean') return { __type: 'boolean', __display: String(arg) };
+    if (typeof arg === 'symbol') return { __type: 'symbol', __display: arg.toString() };
+    if (typeof arg === 'bigint') return { __type: 'bigint', __display: String(arg) };
+    if (typeof arg === 'function') return { __type: 'function', __display: 'ƒ ' + (arg.name || 'anonymous') + '()' };
+    if (arg instanceof Error) {
+      return {
+        __type: 'error',
+        __display: arg.name + ': ' + arg.message,
+        stack: arg.stack || ''
+      };
+    }
+    if (typeof arg === 'object') {
+      if (seen.has(arg)) {
+        return { __type: 'circular', __display: '[Circular Reference]' };
+      }
+      seen.add(arg);
+
+      if (Array.isArray(arg)) {
+        var displayItems = arg.slice(0, 3).map(function(x) {
+          var t = typeof x;
+          if (x === null) return 'null';
+          if (t === 'object') return '…';
+          if (t === 'string') return "'" + x.slice(0, 10) + (x.length > 10 ? '…' : '') + "'";
+          return String(x).slice(0, 10);
+        });
+        return {
+          __type: 'array',
+          __display: '(' + arg.length + ') [' + displayItems.join(', ') + (arg.length > 3 ? ', …' : '') + ']',
+          __items: arg.map(function(item) { return serializeArg(item, seen); })
+        };
+      }
+
+      try {
+        var entries = Object.entries(arg).map(function(kv) {
+          return { key: kv[0], value: serializeArg(kv[1], seen) };
+        });
+        var keys = entries.slice(0, 3).map(function(e) { return e.key; }).join(', ');
+        return {
+          __type: 'object',
+          __display: '{' + (entries.length > 0 ? keys + (entries.length > 3 ? ', …' : '') : '') + '}',
+          __entries: entries
+        };
+      } catch(e) {
+        return { __type: 'object', __display: '{…}' };
+      }
+    }
+    return { __type: 'unknown', __display: String(arg) };
+  }
+
   var originalConsole = {};
   var methods = ['log', 'warn', 'error', 'info', 'dir', 'table', 'clear'];
   methods.forEach(function(method) {
     originalConsole[method] = console[method] ? console[method].bind(console) : function(){};
     console[method] = function() {
-      var args = Array.from(arguments).map(function(arg) {
-        return serializeArg(arg);
-      });
-      window.parent.postMessage({
-        type: 'sandbox-console',
-        level: method === 'dir' ? 'log' : method === 'table' ? 'log' : method,
-        args: args,
-        timestamp: Date.now()
-      }, '*');
+      try {
+        var args = Array.from(arguments).map(function(arg) {
+          return serializeArg(arg);
+        });
+        window.parent.postMessage({
+          type: 'sandbox-console',
+          level: method === 'dir' ? 'log' : method === 'table' ? 'log' : method === 'clear' ? 'clear' : method,
+          args: args,
+          timestamp: Date.now()
+        }, '*');
+      } catch(e) {
+        window.parent.postMessage({
+          type: 'sandbox-error',
+          message: 'Console serialization error: ' + e.message,
+          stack: e.stack || ''
+        }, '*');
+      }
       try { originalConsole[method].apply(console, arguments); } catch(e) {}
     };
   });
@@ -161,6 +233,7 @@ export default function PreviewPanel() {
   const runJavascript = useSandboxStore((s) => s.runJavascript)
   const autoRun = useSandboxStore((s) => s.autoRun)
   const addConsoleEntry = useSandboxStore((s) => s.addConsoleEntry)
+  const clearConsole = useSandboxStore((s) => s.clearConsole)
   const runCode = useSandboxStore((s) => s.runCode)
 
   const debouncedHtml = useDebouncedValue(html, 400)
@@ -183,7 +256,7 @@ export default function PreviewPanel() {
 
       if (data.type === 'sandbox-console') {
         if (data.level === 'clear') {
-          // handle console.clear from iframe
+          clearConsole()
           return
         }
         const entry: ConsoleEntry = {
@@ -211,7 +284,7 @@ export default function PreviewPanel() {
         addConsoleEntry(entry)
       }
     },
-    [addConsoleEntry],
+    [addConsoleEntry, clearConsole],
   )
 
   useEffect(() => {

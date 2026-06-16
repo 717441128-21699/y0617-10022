@@ -9,8 +9,8 @@ const EDITORS = [
   { key: 'javascript' as const, label: 'JS', icon: Braces, color: '#f7df1e', setter: 'setJavascript' as const },
 ]
 
-const DRAG_MIN_WIDTH = 100
-const DRAG_HANDLE_SIZE = 4
+const DRAG_HANDLE_WIDTH = 6
+const DRAG_MIN_WIDTH = 120
 
 export default function EditorPanel() {
   const html = useSandboxStore((s) => s.html)
@@ -32,6 +32,7 @@ export default function EditorPanel() {
 
   const handleMouseDown = useCallback((index: number, e: React.MouseEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     if (!containerRef.current) return
     dragIndex.current = index
     startX.current = e.clientX
@@ -81,19 +82,23 @@ export default function EditorPanel() {
   return (
     <div
       ref={containerRef}
-      className="flex h-full w-full bg-[#16172e] overflow-hidden"
+      className="flex h-full w-full bg-[#16172e] overflow-hidden relative"
     >
       {EDITORS.map((editor, idx) => {
         const Icon = editor.icon
+        const isLast = idx === EDITORS.length - 1
+        const editorWidth = isLast
+          ? `calc(${widths[idx]}% - ${DRAG_HANDLE_WIDTH / 2}px)`
+          : `calc(${widths[idx]}% - ${DRAG_HANDLE_WIDTH / 2}px)`
+
         return (
           <div
             key={editor.key}
-            className="flex flex-col h-full shrink-0"
-            style={{ width: `calc(${widths[idx]}% - ${idx < 2 ? DRAG_HANDLE_SIZE / 2 : 0}px)` }}
+            className="flex flex-col h-full shrink-0 relative"
+            style={{ width: editorWidth }}
           >
             <div
-              className="flex items-center gap-1.5 px-3 py-2 border-b border-[#2a2d4e] bg-[#12132a]"
-              style={{ borderBottomColor: '#2a2d4e' }}
+              className="flex items-center gap-1.5 px-3 py-2 border-b border-[#2a2d4e] bg-[#12132a] shrink-0"
             >
               <Icon size={13} style={{ color: editor.color }} />
               <span
@@ -109,24 +114,25 @@ export default function EditorPanel() {
                 onChange={setters[editor.key]}
                 language={editor.key}
               />
-              <div
-                className="absolute top-0 right-0 bottom-0 w-px bg-[#2a2d4e] pointer-events-none"
-              />
             </div>
+
+            {!isLast && (
+              <div
+                className="absolute top-0 right-0 bottom-0 z-20 cursor-col-resize group"
+                style={{ width: DRAG_HANDLE_WIDTH, transform: 'translateX(50%)' }}
+                onMouseDown={(e) => handleMouseDown(idx, e)}
+              >
+                <div
+                  className="absolute top-0 left-1/2 h-full -translate-x-1/2 w-px bg-[#2a2d4e] group-hover:bg-[#636da0] transition-colors"
+                />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="w-0.5 h-3 rounded-full bg-[#636da0]" />
+                </div>
+              </div>
+            )}
           </div>
         )
       })}
-
-      {[0, 1].map((idx) => (
-        <div
-          key={`drag-${idx}`}
-          className="shrink-0 cursor-col-resize hover:bg-[#3a3d5c] transition-colors group relative z-10 flex items-center justify-center"
-          style={{ width: DRAG_HANDLE_SIZE }}
-          onMouseDown={(e) => handleMouseDown(idx, e)}
-        >
-          <div className="w-0.5 h-10 rounded-full bg-[#2a2d4e] group-hover:bg-[#636da0] transition-colors" />
-        </div>
-      ))}
     </div>
   )
 }

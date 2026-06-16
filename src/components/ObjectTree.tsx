@@ -31,6 +31,8 @@ function getTypeColor(type: string): string {
       return '#d19a66'
     case 'error':
       return '#e06c75'
+    case 'circular':
+      return '#e5c07b'
     case 'array':
       return '#61afef'
     case 'object':
@@ -96,6 +98,18 @@ function ObjectTreeNode({ data, depth = 0, pathPrefix = '' }: TreeNodeProps) {
           </pre>
         )}
       </div>
+    )
+  }
+
+  if (data.__type === 'circular') {
+    return (
+      <span
+        className="italic"
+        style={{ color: '#e5c07b' }}
+        title="Circular Reference"
+      >
+        {data.__display}
+      </span>
     )
   }
 
